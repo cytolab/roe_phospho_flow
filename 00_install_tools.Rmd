@@ -1,0 +1,99 @@
+---
+title: "Check Paths and Install Packages"
+author: "Copyright (c) 2016-2020 by Kirsten Diggins, Sierra Barone, and Jonathan Irish, All Rights Reserved; see EULA-MEM.text for MEM license information"
+date: "February 2020"
+output: html_document
+---
+
+```{r installation_notes, echo=FALSE, results = "markdown"}
+# Print the contents a help file that explains installing packages
+writeLines(readLines(paste(getwd(), "installing.txt", sep="/")))
+
+cat("\n\n...'installation_notes' finished running")
+```
+
+```{r install_flow_packages, echo=FALSE, results = "hide"}
+# install bioconductor and flow cytometry tools for R
+cat("If this works, you should see 4 sets of messages about downloading files that end in a message saying something like package 'BiocManager' successfully unpacked and MD5 sums checked.  You should see this for BioCManager, Biobase, flowCore, and FlowSOM.\n\n")
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("flowCore")
+BiocManager::install("FlowSOM")
+
+cat("\n\n...'install_flow_packages' finished running")
+```
+
+```{r load_flow_packages, echo=FALSE, results = "markdown"}
+# Load and test whether bioconductor and flow packages are installed
+cat("If this works, you may see Attaching Package messages or no message at all; that's good.  If you get a warning, go back to the last CHUNK.\n\n")
+
+library(FlowSOM)
+library(flowCore)
+library(Biobase)
+
+cat("\n\n...'load_flow_packages' finished running")
+```
+
+```{r install_ggplots, echo=FALSE, results = "markup"}
+# install plotting packages
+cat("If this works, you will see text about packages being downloaded.\n\n")
+install.packages("gplots")
+install.packages("ggplot2")
+install.packages("hexbin")
+install.packages("viridis")
+install.packages("ggExtra")
+install.packages("RColorBrewer")
+
+cat("\n\n...'install_ggplots' finished running")
+```
+
+```{r load_ggplots, echo=FALSE, results = "markup"}
+# Load and test whether gplots and ggplot2 packages are installed
+cat("If this works, you may see Attaching Package messages or no message at all; that's good.  If you get a warning, go back to the last CHUNK.\n\n")
+library(gplots)
+library(ggplot2)
+library(hexbin)
+library(viridis)
+library(ggExtra)
+library(RColorBrewer)
+
+cat("\n\n...'load_ggplots' finished running")
+```
+
+```{r install_MEM, echo=FALSE, results = "markup"}
+# install MEM
+cat("If this works, you should see several lines about installing files, then DONE (MEM) near the end.  The MEM help page will also open in the Help menu in RStudio.\n\n")
+
+install.packages("devtools")
+devtools::install_github("cytolab/mem")
+
+cat("\n\n...'install_MEM' finished running")
+```
+
+```{r load_MEM, echo=FALSE, results = "markup"}
+# load MEM and open package documentation
+library(MEM)
+?MEM
+
+cat("\n\n...'load_MEM' finished running")
+```
+
+```{r install_last_packages, echo=FALSE, results = "markup"}
+# install the last packages for UMAP, t-SNE and other tools
+print("You may see a bunch of messages, this is OK as long as they are not errors.\n\n")
+install.packages("tidyverse")
+install.packages("Rtsne")
+install.packages("uwot")
+
+cat("\n\n...'install_last_packages' finished running")
+```
+
+```{r load_last_packages, echo=FALSE, results = "markup"}
+# Load and test the last libraries
+library(tidyverse)
+library(Rtsne)
+library(uwot)
+
+cat("\n\n...'load_last_packages' finished running")
+```

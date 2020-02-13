@@ -1,0 +1,233 @@
+---
+title: "2020-02-13 Automated, Unsupervised Analysis Protocol for Mass Cytometry Data"
+author: "Copyright (c) 2016-2020 by Kirsten Diggins, Sierra Barone, and Jonathan Irish, All Rights Reserved; see EULA-MEM.text for MEM license information"
+output: html_document
+---
+```{r setup, include=FALSE}
+
+# Load all libraries
+# If you get an error message, you will need to try re-installing packages by 
+# going back to the 00_install_tools.RMD script
+library(FlowSOM)
+library(flowCore)
+library(Biobase)
+library(ggplot2)
+library(MEM)
+library(tidyverse)
+library(uwot)
+library(viridis)
+library(ggExtra)
+library(RColorBrewer)
+
+# function to choose markers to use in your analysis 
+choose.markers <- function(exp_data) {
+    print("Numbered column names, in order they appear in file: ")
+    print(paste(c(1:(ncol(exp_data))), ": ", 
+                colnames(exp_data[, c(1:(ncol(exp_data)))]), sep = ""))
+    markers = readline("Enter column numbers to include (e.g. 1:5,6,8:10).\n")
+    sep_vals = unlist(strsplit(markers, ","))
+    list_vals = vector()
+    for (i in 1:length(sep_vals)) {
+        val = sep_vals[i]
+        if (length(unlist(strsplit(val, ":"))) > 1) {
+            new_val = as.numeric(unlist(strsplit(val, ":"))[1]):
+              as.numeric(unlist(strsplit(val, ":"))[2])
+        } else{
+            new_val = as.numeric(sep_vals[i])
+        }
+        list_vals = c(list_vals, new_val)
+    }
+    markerList = c(list_vals)
+    return(markerList)
+}
+
+```
+
+
+```{r set_parameters}
+
+COFACTOR_FOR_ARCSINH_SCALE = 5
+
+NUMBER_OF_CELLS_TO_SAMPLE_PER_FILE = 500
+  
+TARGET_NUMBER_OF_CLUSTERS = 10
+
+SEED = 1
+
+```
+
+```{r read_FCS_files}
+
+setwd(dirname(file.choose()))
+cat(paste0("Working directory set to: ", getwd()))
+fcs.files <- dir(pattern = "*.fcs")
+
+data.lists <- lapply(lapply(fcs.files, read.FCS), exprs)
+
+my.data = as.data.frame(do.call(rbind, mapply(cbind, data.lists, "File_ID" = 
+                                        c(1:length(data.lists)), SIMPLIFY = F)))
+orig_names = c(colnames(my.data),"UMAP1","UMAP2","cluster")
+colnames(my.data)[1:length(my.data) - 1] <- as.character(read.FCS
+(fcs.files[[1]])@parameters@data[["desc"]])
+
+```
+
+```{r data_preparation}
+
+# equally sample the data 
+files.to.sample = split(my.data,my.data$`File_ID`)
+sampled.data <- list()
+for (i in 1: length(files.to.sample)){
+  if (nrow(files.to.sample[[i]])>NUMBER_OF_CELLS_TO_SAMPLE_PER_FILE){            
+    sample.df =  files.to.sample[[i]]
+    sampled.data[[i]] = as.data.frame(sample.df[sample(nrow(sample.df), NUMBER_OF_CELLS_TO_SAMPLE_PER_FILE), ])}        
+  else{
+    sampled.data[[i]] = files.to.sample[[i]]}}
+
+my.sampled.data = as.data.frame(do.call(rbind, sampled.data))   
+```
+
+```{r UMAP}
+set.seed(SEED)
+
+# Run UMAP on chosen markers
+
+# select all channels to use in UMAP by opening console below similar to
+# what you did previously
+chosen.markers = as.data.frame(as.data.frame(my.sampled.data)[,c(choose.markers(my.sampled.data))])
+
+umap.markers <- chosen.markers %>%
+  mutate_all(function(x)
+    asinh(x / COFACTOR_FOR_ARCSINH_SCALE))
+
+myumap <- umap(umap.markers, ret_model = TRUE,verbose = TRUE)
+umap.data = as.data.frame(myumap$embedding)
+colnames(umap.data) <- c("UMAP1", "UMAP2")
+```
+
+```{r FlowSOM on UMAP}
+set.seed(SEED)
+
+umap.matrix <- as.matrix(umap.data)
+UMAP.metadata <- data.frame(name = dimnames(umap.matrix)[[2]], desc = paste('UMAP', dimnames(umap.matrix)[[2]]))
+UMAP.metadata$range <- apply(apply(umap.matrix, 2, range), 2, diff)
+UMAP.metadata$minRange <- apply(umap.matrix, 2, min)
+UMAP.metadata$maxRange <- apply(umap.matrix, 2, max)
+umap.flowframe <- new("flowFrame", exprs=umap.matrix,parameters = AnnotatedDataFrame(UMAP.metadata))
+
+
+fSOM.umap <- FlowSOM(umap.flowframe, compensate = FALSE, transform = FALSE, toTransform=c(1:2), scale = TRUE, colsToUse = c(1:2), nClus = TARGET_NUMBER_OF_CLUSTERS, seed = SEED)
+FlowSOM.clusters <- as.numeric(as.vector(as.matrix(fSOM.umap[[2]][fSOM.umap[[1]]$map$mapping[,1]])))
+
+analysis.data = as.data.frame(cbind(my.sampled.data,umap.data,FlowSOM.clusters))
+colnames(analysis.data)[ncol(analysis.data)]<-"cluster"
+```
+
+```{r visualization}
+set.seed(SEED)
+
+qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, 
+                           rownames(qual_col_pals)))
+col_vector = col_vector[-c(4,17,19,27,29:45)]
+values = sample(col_vector)
+
+range <- apply(apply(umap.data, 2, range), 2, diff)
+graphical.ratio <- (range[1]/range[2])
+
+separate.fcs.files = split(analysis.data,analysis.data$`File_ID`)
+for (i in 1:length(separate.fcs.files)){
+newname  = str_remove(fcs.files[i], ".fcs")
+plot <- data.frame(x = separate.fcs.files[[i]][["UMAP1"]], 
+                   y = separate.fcs.files[[i]][["UMAP2"]], 
+                   col = as.factor(separate.fcs.files[[i]][["cluster"]]))
+print(ggplot(plot) + geom_point(aes(x=x, y=y, col = col)) +
+  coord_fixed(ratio=graphical.ratio)+ 
+  labs(color = "FlowSOM Cluster", x = "UMAP1", y = "UMAP2", 
+       title = "FlowSOM Clustering on UMAP Axes",caption = newname) + 
+  scale_color_manual(values = values) + 
+  guides(colour = guide_legend(override.aes = list(size=5)))+
+  theme_bw() + theme(plot.caption = element_text(size = 6)))}
+
+# plot FlowSOM clusters on UMAP axes
+ggplot(plot) + coord_fixed(ratio=graphical.ratio) + 
+  geom_point(aes(x=x, y=y, color=col),cex = 1.5) + 
+  guides(colour = guide_legend(override.aes = list(size=5), nrow = 13)) +
+  labs(x = "UMAP 1", y = "UMAP 2",title = "FlowSOM Clustering on UMAP Axes (concatenated)", 
+       color = "FlowSOM Cluster") + theme_bw() + 
+  scale_color_manual(values = values)
+
+```
+
+```{r MEM}
+MEM.data = cbind(my.sampled.data,FlowSOM.clusters)
+colnames(analysis.data)[ncol(analysis.data)]<-"cluster"
+
+MEM.values = MEM(MEM.data, transform = TRUE, cofactor = COFACTOR_FOR_ARCSINH_SCALE, 
+                 choose.markers = TRUE, markers = "all", zero.ref = FALSE, rename.markers = TRUE,
+                 new.marker.names = "none", file.is.clust = FALSE, add.fileID = FALSE, IQR.thresh = NULL)
+
+build.heatmaps(MEM.values, cluster.MEM = "both", cluster.medians = "none", 
+               display.thresh = 1, newWindow.heatmaps=TRUE, output.files = TRUE, labels = TRUE, only.MEMheatmap = FALSE)
+
+
+MEM.values = MEM(MEM.data, transform = TRUE, cofactor = COFACTOR_FOR_ARCSINH_SCALE, 
+                 choose.markers = TRUE, markers = "all", zero.ref = FALSE, rename.markers = TRUE,
+                 new.marker.names = "none", file.is.clust = FALSE, add.fileID = FALSE, IQR.thresh = NULL)
+
+build.heatmaps(MEM.values, cluster.MEM = "both", cluster.medians = "none", 
+               display.thresh = 1, newWindow.heatmaps=TRUE, output.files = TRUE, labels = TRUE, only.MEMheatmap = FALSE)
+
+```
+
+
+```{r export_files_fcs}
+dir.create(file.path(getwd(), "/datafiles_tcellpanel/output files"), showWarnings = FALSE)
+setwd(paste(getwd(), "/datafiles_tcellpanel/output files", sep = ""))
+
+data.to.export = cbind(my.sampled.data,umap.data,cluster)
+separate.files = split(data.to.export,as.factor(data.to.export$`File ID`))
+
+subset.abundances <- list()
+  # find subset abundances for each sample
+  for (j in 1:length(separate.files)){
+    subset.abundances[[j]] = (summary(as.factor(separate.files[[j]]$cluster)))*100/nrow(separate.files[[j]])
+  }
+all.subset.abundances = ldply(subset.abundances,rbind)
+all.subset.abundances[is.na(all.subset.abundances)]<-0
+colnames(all.subset.abundances) <- paste0("Subset_",colnames(all.subset.abundances))
+rownames(all.subset.abundances) <- my.files
+write.csv(all.subset.abundances,paste0(strftime(Sys.time(),"%Y-%m-%d_%H%M%S"),"_sample_subset_abundances.csv"))
+
+event.counts <- list()
+  # find subset abundances for each sample
+  for (j in 1:length(separate.files)){
+    event.counts[[j]] = (summary(as.factor(separate.files[[j]]$cluster)))}
+
+all.event.counts = ldply(event.counts,rbind)
+all.event.counts[is.na(all.event.counts)]<-0
+colnames(all.event.counts) <- paste0("Subset_",colnames(all.event.counts))
+rownames(all.event.counts) <- my.files
+write.csv(all.event.counts,paste0(strftime(Sys.time(),"%Y-%m-%d_%H%M%S"),"_sample_subset_event_counts.csv"))
+
+for (i in 1:length(separate.files)){
+  single.file = separate.files[[i]]
+  remove.ID  = single.file[-c(ncol(my.sampled.data))]
+  mat <- as.matrix(single.file)
+# create flowFrame
+metadata <-
+  data.frame(name = dimnames(mat)[[2]],
+             desc = dimnames(mat)[[2]])
+metadata$range <- apply(apply(mat, 2, range), 2, diff)
+metadata$minRange <- apply(mat, 2, min)
+metadata$maxRange <- apply(mat, 2, max)
+export.flowframe <- new("flowFrame",
+                      exprs = mat,
+                      parameters = AnnotatedDataFrame(metadata))
+newname  = str_remove(my.files[i], ".fcs")
+  filename = paste0(newname,"_UMAP_FlowSOM.fcs")
+  write.FCS(export.flowframe,filename = filename)
+  print(i)}
+
+ggexport(UMAP_dot_plot,UMAP_density_plot,FlowSOM_clusters_plot,filename = paste(strftime(Sys.time(),"%Y-%m-%d_%H%M%S"),"_FlowSOM_clusters_plot.pdf",sep=""), width = 7.2, height = 5.4)
+```
