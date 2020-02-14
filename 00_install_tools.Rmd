@@ -40,9 +40,6 @@ cat("\n\n...'load_flow_packages' finished running")
 cat("If this works, you will see text about packages being downloaded.\n\n")
 install.packages("gplots")
 install.packages("ggplot2")
-install.packages("hexbin")
-install.packages("viridis")
-install.packages("ggExtra")
 install.packages("RColorBrewer")
 
 cat("\n\n...'install_ggplots' finished running")
@@ -53,9 +50,6 @@ cat("\n\n...'install_ggplots' finished running")
 cat("If this works, you may see Attaching Package messages or no message at all; that's good.  If you get a warning, go back to the last CHUNK.\n\n")
 library(gplots)
 library(ggplot2)
-library(hexbin)
-library(viridis)
-library(ggExtra)
 library(RColorBrewer)
 
 cat("\n\n...'load_ggplots' finished running")
@@ -83,7 +77,6 @@ cat("\n\n...'load_MEM' finished running")
 # install the last packages for UMAP, t-SNE and other tools
 print("You may see a bunch of messages, this is OK as long as they are not errors.\n\n")
 install.packages("tidyverse")
-install.packages("Rtsne")
 install.packages("uwot")
 
 cat("\n\n...'install_last_packages' finished running")
@@ -92,7 +85,6 @@ cat("\n\n...'install_last_packages' finished running")
 ```{r load_last_packages, echo=FALSE, results = "markup"}
 # Load and test the last libraries
 library(tidyverse)
-library(Rtsne)
 library(uwot)
 
 cat("\n\n...'load_last_packages' finished running")
